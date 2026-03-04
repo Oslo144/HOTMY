@@ -48,7 +48,6 @@ const firebaseConfig = {
 };
 
 
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
@@ -130,8 +129,6 @@ function actualizarInfo(lat, lng) {
   `;
 }
 
-
-// Actualiza solo la fecha local cada segundo (NO consume Firebase)
 setInterval(() => {
   if (marker) {
     const coords = marker.getLngLat();
