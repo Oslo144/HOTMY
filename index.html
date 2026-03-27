@@ -1,40 +1,60 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Ubicación en Tiempo Real</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta charset="UTF-8">
+<title>Mapa PRO FINAL - Con Lista de Dispositivos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
-  <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.css" rel="stylesheet"/>
-  <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.20.0/mapbox-gl.css" rel="stylesheet"/>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.20.0/mapbox-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
-  <style>
-    body, html { margin:0; padding:0; height:100%; }
-    #map { width:100%; height:100vh; }
-    #info {
-      position:absolute;
-      top:10px;
-      left:10px;
-      background:white;
-      padding:12px 15px;
-      border-radius:8px;
-      box-shadow:0 2px 10px rgba(0,0,0,0.3);
-      z-index:999;
-      font-family:Arial;
-      font-size:14px;
-      line-height:1.6;
-    }
-  </style>
+<style>
+  body, html { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; }
+  #map { width:100%; height:100vh; }
+
+  #panel {
+    position:absolute; top:10px; left:10px; background:white; padding:12px; border-radius:8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index:999; display:flex; gap:8px; flex-wrap:wrap;
+  }
+  button { padding:8px 14px; font-size:14px; }
+
+  #dispositivosPanel {
+    position:absolute; top:10px; right:10px; width:340px; background:white; border-radius:8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.25); z-index:999; max-height:85vh; overflow-y:auto;
+    padding:12px; font-size:14px;
+  }
+  #dispositivosPanel h3 { margin:0 0 12px 0; text-align:center; }
+  .dispositivo {
+    background:#f8f9fa; border-radius:6px; padding:10px; margin-bottom:8px;
+    border-left:5px solid #007bff;
+  }
+  .dentro { color:#28a745; font-weight:bold; }
+  .fuera { color:#dc3545; font-weight:bold; }
+  .info { font-size:13px; color:#555; }
+</style>
 </head>
+
 <body>
 
 <div id="map"></div>
-<div id="info">Esperando datos...</div>
+
+<div id="panel">
+  <button onclick="modoCrear()"> Crear Geocerca</button>
+  <button onclick="modoEditar()"> Editar Geocerca</button>
+  <button onclick="guardar()"> Guardar</button>
+  <button onclick="eliminarTodo()"> Eliminar Todo</button>
+</div>
+
+<div id="dispositivosPanel">
+  <h3>📍 Dispositivos en Vivo</h3>
+  <div id="listaDispositivos">Esperando dispositivos...</div>
+</div>
 
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, addDoc, getDocs, deleteDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyChJZGxSVTh6uryXwB29GeMqk11tllJ19g",
@@ -47,7 +67,6 @@ const firebaseConfig = {
   measurementId: "G-DR1JBW5GED"
 };
 
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
@@ -56,87 +75,271 @@ mapboxgl.accessToken = 'pk.eyJ1Ijoib2xkc2FrZSIsImEiOiJjbW0xZmwxaW0wOWc3Mm9xMnFjO
 const map = new mapboxgl.Map({
   container: "map",
   style: "mapbox://styles/mapbox/streets-v12",
-  center: [0, 0],
-  zoom: 2
+  center: [-68.1193, -16.5],
+  zoom: 14
 });
 
-let marker = null;
-let firstLoad = true;
-let fechaServidorTexto = "Sin fecha";
+// =======================
+// 🔥 VARIABLES
+// =======================
+let modo = "normal";
+let puntos = [];
+let markersPuntos = [];
+let seleccionId = null;
+let nombreActual = null;
+const cache = {};           // geocercas
+const dispositivos = {};    // dispositivos en vivo
 
-const info = document.getElementById("info");
+// =======================
+// 🔥 MULTI DISPOSITIVOS + LISTA EN VIVO
+// =======================
+onSnapshot(collection(db, "ubicaciones"), (snap) => {
+  snap.docChanges().forEach(change => {
+    const id = change.doc.id;
+    const d = change.doc.data();
 
-const ref = doc(db, "ubi", "userubi");
+    if (change.type === "removed") {
+      delete dispositivos[id];
+      if (markers[id]) markers[id].remove();
+      delete markers[id];
+    } else if (d.latitud && d.longitud) {
+      dispositivos[id] = {
+        lat: d.latitud,
+        lon: d.longitud,
+        ultimaActualizacion: new Date().toLocaleString('es-BO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      };
 
-onSnapshot(ref, (snap) => {
-
-  if (!snap.exists()) {
-    info.innerHTML = "Documento no existe";
-    return;
-  }
-
-  const data = snap.data();
-
-  const lat = parseFloat(data.latitud);
-  const lng = parseFloat(data.longitud);
-
-  if (isNaN(lat) || isNaN(lng)) {
-    info.innerHTML = "Coordenadas inválidas";
-    return;
-  }
-
-  if (!marker) {
-    marker = new mapboxgl.Marker({ color: "red" })
-      .setLngLat([lng, lat])
-      .addTo(map);
-  } else {
-    marker.setLngLat([lng, lat]);
-  }
-
-  if (firstLoad) {
-    map.flyTo({
-      center: [lng, lat],
-      zoom: 16
-    });
-    firstLoad = false;
-  }
-
-  if (data.date && data.date.seconds) {
-    const fechaServidor = new Date(data.date.seconds * 1000);
-    fechaServidorTexto = fechaServidor.toLocaleString("es-BO", {
-      timeZone: "America/La_Paz"
-    });
-  }
-
-  actualizarInfo(lat, lng);
-
-}, (error) => {
-  info.innerHTML = "Error: " + error.message;
+      // Marker rojo
+      if (markers[id]) {
+        markers[id].setLngLat([d.longitud, d.latitud]);
+      } else {
+        markers[id] = new mapboxgl.Marker({ color: "red" })
+          .setLngLat([d.longitud, d.latitud])
+          .addTo(map);
+      }
+    }
+  });
+  actualizarListaDispositivos();
 });
 
+// =======================
+// 🔥 CALCULAR ESTADO (Dentro / Fuera)
+// =======================
+function calcularEstado(lon, lat) {
+  const dentroDe = [];
+  Object.entries(cache).forEach(([id, data]) => {
+    if (!data.nombre || !data.puntos || data.puntos.length < 3) return;
 
-function actualizarInfo(lat, lng) {
+    const coords = data.puntos.map(p => [p.lon, p.lat]);
+    coords.push(coords[0]);
 
-  const fechaLocal = new Date().toLocaleString("es-BO", {
-    timeZone: "America/La_Paz"
+    const punto = turf.point([lon, lat]);
+    const poly = turf.polygon([coords]);
+
+    if (turf.booleanPointInPolygon(punto, poly)) {
+      dentroDe.push(data.nombre);
+    }
   });
 
-  info.innerHTML = `
-    <b>Latitud:</b> ${lat.toFixed(6)} <br>
-    <b>Longitud:</b> ${lng.toFixed(6)} <br><br>
-    <b>Fecha servidor:</b> ${fechaServidorTexto} <br>
-    <b>Fecha actual navegador:</b> ${fechaLocal}
-  `;
+  if (dentroDe.length > 0) {
+    return { texto: ` Dentro de: ${dentroDe.join(", ")}`, clase: "dentro" };
+  }
+  return { texto: " Fuera de todas las geocercas", clase: "fuera" };
 }
 
-setInterval(() => {
-  if (marker) {
-    const coords = marker.getLngLat();
-    actualizarInfo(coords.lat, coords.lng);
+// =======================
+// 🔥 ACTUALIZAR LISTA DE DISPOSITIVOS
+// =======================
+function actualizarListaDispositivos() {
+  const contenedor = document.getElementById("listaDispositivos");
+  contenedor.innerHTML = "";
+
+  if (Object.keys(dispositivos).length === 0) {
+    contenedor.innerHTML = `<p style="text-align:center;color:#888;">Esperando dispositivos...</p>`;
+    return;
   }
-}, 1000);
+
+  Object.entries(dispositivos).forEach(([id, dev]) => {
+    const estado = calcularEstado(dev.lon, dev.lat);
+
+    const div = document.createElement("div");
+    div.className = "dispositivo";
+    div.innerHTML = `
+      <strong>${id}</strong><br>
+      <span class="info"> Lat: ${dev.lat.toFixed(6)} | Lng: ${dev.lon.toFixed(6)}</span><br>
+      <span class="info"> ${dev.ultimaActualizacion}</span><br>
+      <span class="${estado.clase}">${estado.texto}</span>
+    `;
+    contenedor.appendChild(div);
+  });
+}
+
+// =======================
+// 🔥 MODOS
+// =======================
+window.modoCrear = () => { reset(); modo = "crear"; };
+window.modoEditar = () => { modo = "editar"; alert(" Modo Editar activado\nHaz clic dentro de una geocerca"); };
+
+// =======================
+// 🔥 CLICK MAPA
+// =======================
+map.on("click", (e) => {
+  if (modo === "crear") agregarPunto(e.lngLat);
+  if (modo === "editar") seleccionarGeocerca(e.lngLat);
+});
+
+// =======================
+// 🔥 AGREGAR PUNTO + MARCADORES
+// =======================
+function agregarPunto(lngLat) {
+  const punto = { lat: lngLat.lat, lon: lngLat.lng };
+  puntos.push(punto);
+  crearMarker(punto);
+  dibujarTemp();
+}
+
+const markers = {};
+function crearMarker(p) {
+  const m = new mapboxgl.Marker({ draggable: true, color: "blue" })
+    .setLngLat([p.lon, p.lat])
+    .addTo(map);
+
+  m.on("dragend", () => {
+    const pos = m.getLngLat();
+    p.lat = pos.lat; p.lon = pos.lng;
+    dibujarTemp();
+  });
+  markersPuntos.push(m);
+}
+
+// =======================
+// 🔥 DIBUJO TEMPORAL
+// =======================
+function dibujarTemp() {
+  if (map.getSource("temp")) { map.removeLayer("temp-fill"); map.removeLayer("temp-line"); map.removeSource("temp"); }
+  if (puntos.length < 3) return;
+
+  const coords = puntos.map(p => [p.lon, p.lat]);
+  coords.push(coords[0]);
+
+  map.addSource("temp", { type:"geojson", data:{ type:"Feature", geometry:{ type:"Polygon", coordinates:[coords] }}});
+  map.addLayer({ id:"temp-fill", type:"fill", source:"temp", paint:{ "fill-color":"#0000FF", "fill-opacity":0.3 }});
+  map.addLayer({ id:"temp-line", type:"line", source:"temp", paint:{ "line-color":"#0000FF", "line-width":4 }});
+}
+
+// =======================
+// 🔥 SELECCIONAR PARA EDITAR
+// =======================
+function seleccionarGeocerca(lngLat) {
+  let encontrada = false;
+  Object.entries(cache).forEach(([id, data]) => {
+    if (!data.puntos || data.puntos.length < 3) return;
+    const coords = data.puntos.map(p => [p.lon, p.lat]); coords.push(coords[0]);
+
+    if (turf.booleanPointInPolygon(turf.point([lngLat.lng, lngLat.lat]), turf.polygon([coords]))) {
+      encontrada = true;
+      seleccionId = id;
+      nombreActual = data.nombre || "";
+      modo = "crear";
+
+      limpiarEdicion();
+      puntos = JSON.parse(JSON.stringify(data.puntos));
+      puntos.forEach(p => crearMarker(p));
+      dibujarTemp();
+    }
+  });
+  if (!encontrada) alert("❌ No seleccionaste ninguna geocerca");
+}
+
+// =======================
+// 🔥 LIMPIAR Y RESET
+// =======================
+function limpiarEdicion() {
+  puntos = []; markersPuntos.forEach(m => m.remove()); markersPuntos = [];
+  if (map.getSource("temp")) { map.removeLayer("temp-fill"); map.removeLayer("temp-line"); map.removeSource("temp"); }
+}
+function reset() {
+  limpiarEdicion();
+  seleccionId = null;
+  nombreActual = null;
+  modo = "normal";
+}
+
+// =======================
+// 🔥 GUARDAR (Crear o Editar)
+// =======================
+window.guardar = async () => {
+  if (puntos.length < 3) return alert(" Mínimo 3 puntos");
+
+  const nombre = prompt("Nombre de la geocerca:", nombreActual || "Geocerca nueva");
+  if (nombre === null) return;
+
+  try {
+    const dataGuardar = { nombre: nombre.trim(), puntos };
+
+    if (seleccionId) {
+      await setDoc(doc(db, "geocercas", seleccionId), dataGuardar);
+      alert(" Geocerca editada");
+    } else {
+      await addDoc(collection(db, "geocercas"), dataGuardar);
+      alert(" Nueva geocerca guardada");
+    }
+    reset();
+  } catch (e) { alert(" Error: " + e.message); }
+};
+
+// =======================
+// 🔥 ELIMINAR TODO
+// =======================
+window.eliminarTodo = async () => {
+  if (!confirm(" ¿Eliminar TODAS las geocercas?")) return;
+  const snap = await getDocs(collection(db, "geocercas"));
+  const promises = snap.docs.map(d => deleteDoc(doc(db, "geocercas", d.id)));
+  await Promise.all(promises);
+  limpiarMapa();
+  reset();
+};
+
+// =======================
+// 🔥 DIBUJAR GEOCERCAS (incremental)
+// =======================
+onSnapshot(collection(db, "geocercas"), (snap) => {
+  snap.docChanges().forEach(change => {
+    const id = change.doc.id;
+    const data = change.doc.data();
+
+    if (change.type === "removed") {
+      if (map.getLayer(id)) map.removeLayer(id);
+      if (map.getLayer(id+"-line")) map.removeLayer(id+"-line");
+      if (map.getSource(id)) map.removeSource(id);
+      delete cache[id];
+    } else {
+      cache[id] = data;
+
+      const coords = data.puntos.map(p => [p.lon, p.lat]);
+      coords.push(coords[0]);
+
+      if (map.getLayer(id)) map.removeLayer(id);
+      if (map.getLayer(id+"-line")) map.removeLayer(id+"-line");
+      if (map.getSource(id)) map.removeSource(id);
+
+      map.addSource(id, { type:"geojson", data:{ type:"Feature", geometry:{ type:"Polygon", coordinates:[coords] }}});
+      map.addLayer({ id:id, type:"fill", source:id, paint:{ "fill-color":"#0000FF", "fill-opacity":0.25 }});
+      map.addLayer({ id:id+"-line", type:"line", source:id, paint:{ "line-color":"#0000FF", "line-width":3 }});
+    }
+  });
+  actualizarListaDispositivos();   // ← actualiza estado si cambian geocercas
+});
+
+function limpiarMapa() {
+  Object.keys(cache).forEach(id => {
+    if (map.getLayer(id)) map.removeLayer(id);
+    if (map.getLayer(id+"-line")) map.removeLayer(id+"-line");
+    if (map.getSource(id)) map.removeSource(id);
+  });
+  Object.keys(cache).forEach(id => delete cache[id]);
+}
 
 </script>
-
 </body>
 </html>
