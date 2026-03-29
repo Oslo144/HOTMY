@@ -15,7 +15,6 @@ body, html {
     height: 100vh;
 }
 
-/* Panel Superior */
 #panel {
     position: absolute;
     top: 10px;
@@ -44,10 +43,9 @@ body, html {
     opacity: 0.9;
 }
 
-#panel .btn-success { background: #28a745; }
-#panel .btn-danger { background: #dc3545; }
+#panel button:nth-child(3) { background: #28a745; }
+#panel button:nth-child(4) { background: #dc3545; }
 
-/* Panel Dispositivos - Responsivo */
 #dispositivosPanel {
     position: absolute;
     top: 10px;
@@ -106,25 +104,6 @@ body, html {
 .fuera { color: #dc3545; font-weight: bold; }
 .info { font-size: 13px; color: #555; }
 
-/* Toast */
-#toast {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #333;
-    color: white;
-    padding: 12px 20px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    z-index: 10000;
-    display: none;
-    font-size: 14px;
-    text-align: center;
-    max-width: 90%;
-}
-
-/* Responsivo para móviles */
 @media (max-width: 768px) {
     #panel {
         top: 5px;

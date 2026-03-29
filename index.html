@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mapbox2.0 XD</title>
+    <title>Mapa PRO - Geocercas</title>
     
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.20.0/mapbox-gl.css" rel="stylesheet"/>
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.20.0/mapbox-gl.js"></script>
@@ -15,22 +15,17 @@
 
     <div id="map"></div>
 
-    <!-- Panel Superior -->
     <div id="panel">
-        <button onclick="modoCrear()">➕ Crear Geocerca</button>
-        <button onclick="modoEditar()">✏️ Editar Geocerca</button>
-        <button onclick="guardar()">💾 Guardar</button>
-        <button onclick="eliminarTodo()">🗑️ Eliminar Todo</button>
+        <button onclick="modoCrear()">Crear Geocerca</button>
+        <button onclick="modoEditar()">Editar Geocerca</button>
+        <button onclick="guardar()">Guardar</button>
+        <button onclick="eliminarTodo()">Eliminar Todo</button>
     </div>
 
-    <!-- Panel de Dispositivos -->
     <div id="dispositivosPanel">
-        <h3>📍 Dispositivos en Vivo</h3>
+        <h3>Dispositivos en Vivo</h3>
         <div id="listaDispositivos">Esperando dispositivos...</div>
     </div>
-
-    <!-- Toast -->
-    <div id="toast"></div>
 
     <script type="module" src="app.js"></script>
 </body>

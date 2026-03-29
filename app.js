@@ -12,6 +12,7 @@ const firebaseConfig = {
   measurementId: "G-DR1JBW5GED"
 };
 
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
@@ -34,15 +35,6 @@ const cache = {};
 const dispositivos = {};
 const markers = {};
 
-// Toast
-function showToast(mensaje, duracion = 2500) {
-    const toast = document.getElementById("toast");
-    toast.textContent = mensaje;
-    toast.style.display = "block";
-    setTimeout(() => toast.style.display = "none", duracion);
-}
-
-// Crear marcador cuadrado grande
 function crearMarkerArrastrable(punto, index) {
     const el = document.createElement('div');
     el.style.width = '16px';
@@ -93,9 +85,14 @@ function dibujarTemp() {
     map.addLayer({ id: "temp-line", type: "line", source: "temp", paint: { "line-color": "#333333", "line-width": 3 }});
 }
 
-// Modos
-window.modoCrear = () => { reset(); modo = "crear"; };
-window.modoEditar = () => { modo = "editar"; };
+window.modoCrear = () => { 
+    reset(); 
+    modo = "crear"; 
+};
+
+window.modoEditar = () => { 
+    modo = "editar"; 
+};
 
 map.on("click", (e) => {
     if (modo === "crear") agregarPunto(e.lngLat);
@@ -128,9 +125,8 @@ function seleccionarGeocerca(lngLat) {
     });
 }
 
-// Guardar
 window.guardar = async () => {
-    if (puntos.length < 3) return showToast("❌ Mínimo 3 puntos", 3000);
+    if (puntos.length < 3) return;
 
     const nombre = prompt("Nombre de la geocerca:", nombreActual || "Geocerca nueva");
     if (nombre === null || !nombre.trim()) return;
@@ -139,15 +135,11 @@ window.guardar = async () => {
         const dataGuardar = { nombre: nombre.trim(), puntos };
         if (seleccionId) {
             await setDoc(doc(db, "geocercas", seleccionId), dataGuardar);
-            showToast("✅ Geocerca actualizada");
         } else {
             await addDoc(collection(db, "geocercas"), dataGuardar);
-            showToast("✅ Nueva geocerca guardada");
         }
         reset();
-    } catch (e) {
-        showToast("❌ Error al guardar");
-    }
+    } catch (e) {}
 };
 
 window.eliminarTodo = async () => {
@@ -156,7 +148,6 @@ window.eliminarTodo = async () => {
     await Promise.all(snap.docs.map(d => deleteDoc(doc(db, "geocercas", d.id))));
     limpiarMapa();
     reset();
-    showToast("🗑️ Todas las geocercas eliminadas");
 };
 
 function limpiarMapa() {
@@ -186,7 +177,6 @@ function reset() {
     modo = "normal";
 }
 
-// Ir a dispositivo
 window.irADispositivo = (id) => {
     const dev = dispositivos[id];
     if (!dev) return;
@@ -197,10 +187,8 @@ window.irADispositivo = (id) => {
     });
 };
 
-// Map Load + Listeners
 map.on("load", () => {
 
-    // Dispositivos
     onSnapshot(collection(db, "ubicaciones"), (snap) => {
         snap.docChanges().forEach(change => {
             const id = change.doc.id;
@@ -233,7 +221,6 @@ map.on("load", () => {
         actualizarListaDispositivos();
     });
 
-    // Geocercas (gris)
     onSnapshot(collection(db, "geocercas"), (snap) => {
         snap.docChanges().forEach(change => {
             const id = change.doc.id;
@@ -264,7 +251,6 @@ map.on("load", () => {
     });
 });
 
-// Lista de dispositivos
 function calcularEstado(lon, lat) {
     const dentroDe = [];
     Object.entries(cache).forEach(([id, data]) => {
@@ -276,8 +262,8 @@ function calcularEstado(lon, lat) {
         }
     });
     return dentroDe.length > 0 
-        ? { texto: `🟢 DENTRO DE: ${dentroDe.join(", ")}`, clase: "dentro" }
-        : { texto: "🔴 FUERA DE TODAS LAS GEOCERCAS", clase: "fuera" };
+        ? { texto: "DENTRO DE: " + dentroDe.join(", "), clase: "dentro" }
+        : { texto: "FUERA DE TODAS LAS GEOCERCAS", clase: "fuera" };
 }
 
 function actualizarListaDispositivos() {
@@ -297,7 +283,7 @@ function actualizarListaDispositivos() {
             <div class="dispositivo-info">
                 <strong>${id}</strong><br>
                 <span class="info">Lat: ${dev.lat.toFixed(6)} | Lon: ${dev.lon.toFixed(6)}</span><br>
-                <span class="info">🕒 ${dev.ultimaActualizacion}</span><br>
+                <span class="info">${dev.ultimaActualizacion}</span><br>
                 <span class="${estado.clase}">${estado.texto}</span>
             </div>
             <button onclick="irADispositivo('${id}')">Ver</button>
